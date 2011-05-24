@@ -1,0 +1,11 @@
+*.suo
+*proj.user
+bin
+x86
+obj
+Debug
+Release
+desktop.ini
+*.cache
+*.sdf
+*.opensdf
