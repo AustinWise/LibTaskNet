@@ -48,17 +48,16 @@ namespace Austin.LibTaskNet
             end(ar);
         }
 
-        //public static void WaitAsyncPattern<T1, T2, T3, TResult>(Func<T1, T2, AsyncCallback, object, IAsyncResult> begin, Func<IAsyncResult, TResult> end)
-        //{
-        //    var ar = begin(null, null);
-        //    Wait(new AsyncPatternTask(ar));
-        //    end(ar);
-        //}
-
-        private static void Read()
+        public static TResult WaitAsyncPattern<T1, T2, T3, TResult>(Func<T1, T2, T3, AsyncCallback, object, IAsyncResult> begin, Func<IAsyncResult, TResult> end, T1 arg1, T2 arg2, T3 arg3)
         {
-            Stream s;
-            //s.BeginRead(
+            var ar = begin(arg1, arg2, arg3, null, null);
+            Wait(new AsyncPatternTask(ar));
+            return end(ar);
+        }
+
+        public static int Read(Stream s, byte[] buffer, int offset, int count)
+        {
+            return WaitAsyncPattern(s.BeginRead, s.EndRead, buffer, offset, count);
         }
     }
 }

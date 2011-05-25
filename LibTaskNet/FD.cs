@@ -66,7 +66,9 @@ namespace Austin.LibTaskNet
         {
             StartFdTask();
             sleeping.Add(t);
+            Task.State("fd wait");
             Task.Switch();
+            Task.State("fd done");
         }
     }
 }
