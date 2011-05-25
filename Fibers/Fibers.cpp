@@ -15,11 +15,9 @@
 
 namespace Fibers {
 
-typedef System::Runtime::InteropServices::GCHandle GCHandle;
-
 VOID CALLBACK unmanaged_fiberproc(PVOID pvoid);
 
-__gc private struct StopFiber {};
+private ref struct StopFiber {};
 
 enum FiberStateEnum {
 	FiberCreated, FiberRunning, FiberStopPending, FiberStopped
@@ -31,8 +29,9 @@ enum FiberStateEnum {
 ICorRuntimeHost *corhost;
 
 void initialize_corhost() {
-	CorBindToCurrentRuntime(0, CLSID_CorRuntimeHost,
-		IID_ICorRuntimeHost, (void**) &corhost);
+	HRESULT hr = CorBindToCurrentRuntime(0, CLSID_CorRuntimeHost, IID_ICorRuntimeHost, (void**) &corhost);
+	if (!SUCCEEDED(hr))
+		abort();
 }
 
 #endif
@@ -40,50 +39,58 @@ void initialize_corhost() {
 void CorSwitchToFiber(void *fiber) {
 #if defined(CORHOST)
 	DWORD *cookie;
-	corhost->SwitchOutLogicalThreadState(&cookie);
+	HRESULT hr = corhost->SwitchOutLogicalThreadState(&cookie);
+	if (!SUCCEEDED(hr))
+		abort();
 #endif
 	SwitchToFiber(fiber);
 #if defined(CORHOST)
-	corhost->SwitchInLogicalThreadState(cookie);
+	hr = corhost->SwitchInLogicalThreadState(cookie);
+	if (!SUCCEEDED(hr))
+		abort();
 #endif
 }
 
 #pragma managed
 
-public __delegate System::Object* Coroutine();
+public delegate System::Object^ Coroutine();
 
-__gc __abstract public class Fiber : public System::IDisposable {
+public ref class Fiber abstract {
 public:
 #if defined(CORHOST)
 	static Fiber() { initialize_corhost(); }
 #endif
 
-	Fiber() : retval(0), state(FiberCreated) {
-		void *objptr = (void*) GCHandle::op_Explicit(GCHandle::Alloc(this));
+	Fiber() : retval(nullptr), state(FiberCreated) {
+		System::IntPtr^ iptr = static_cast<System::IntPtr>(System::Runtime::InteropServices::GCHandle::Alloc(this));
+		void *objptr = iptr->ToPointer();
 		fiber = CreateFiber(0, unmanaged_fiberproc, objptr);
 	}
 
-	__property bool get_IsRunning() {
+	property bool IsRunning {
+		bool get()
+		{
 		return state != FiberStopped;
+		}
 	}
 
-	static Coroutine* op_Implicit(Fiber *obj) {
-		return new Coroutine(obj, &Fiber::Resume);
+	static operator Coroutine^(Fiber^ obj) {
+		return gcnew Coroutine(obj, &Fiber::Resume);
 	}
 
-	System::Object* Resume() {
+	System::Object^ Resume() {
 		if(!fiber || state == FiberStopped)
-			return 0;
+			return nullptr;
 		initialize_thread();
 		void *current = GetCurrentFiber();
 		if(fiber == current)
-			return 0;
+			return nullptr;
 		previousfiber = current;
 		CorSwitchToFiber(fiber);
 		return retval;
 	}
 
-	void Dispose() {
+	~Fiber() {
 		if(fiber) {
 			if(state  == FiberRunning) {
 				initialize_thread();
@@ -101,24 +108,24 @@ public:
 		}
 	}
 
-	System::Object *GetException() {
+	System::Object^ GetException() {
 		return exception;
 	}
 protected:
 	virtual void Run() = 0;
-	void Yield(System::Object *obj) {
+	void Yield(System::Object^ obj) {
 		retval = obj;
 		CorSwitchToFiber(previousfiber);
 		if(state == FiberStopPending)
-			throw new StopFiber;
+			throw gcnew StopFiber;
 	}
 private:
 	[System::ThreadStatic] static bool thread_is_fiber;
 
 	void *fiber, *previousfiber;
 	FiberStateEnum state;
-	System::Object *retval;
-	System::Object *exception;
+	System::Object^ retval;
+	System::Object^ exception;
 
 	static void initialize_thread() {
 		if(!thread_is_fiber) {
@@ -126,26 +133,26 @@ private:
 			thread_is_fiber = true;
 		}
 	}
-private public:
+internal:
 	void* main() {
 		state = FiberRunning;
 		try {
 			Run();
-		} catch(System::Object *x) {
+		} catch(System::Object^ x) {
 			//System::Console::Error->WriteLine(
 			//	S"\nFIBERS.DLL: main Caught {0}", x);
 			exception = x;
 		}
 		state = FiberStopped;
-		retval = 0;
+		retval = nullptr;
 		return previousfiber;
 	}
 };
 
 void* fibermain(void* objptr) {
-	System::IntPtr ptr = (System::IntPtr) objptr;
-	GCHandle g = GCHandle::op_Explicit(ptr);
-	Fiber *fiber = static_cast<Fiber*>(g.Target);
+	System::IntPtr ptr = System::IntPtr(objptr);
+	System::Runtime::InteropServices::GCHandle g = static_cast<System::Runtime::InteropServices::GCHandle>(ptr);
+	Fiber^ fiber = static_cast<Fiber^>(g.Target);
 	g.Free();
 	return fiber->main();
 }
