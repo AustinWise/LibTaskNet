@@ -4,8 +4,10 @@
 #define _WIN32_WINNT 0x400
 
 #using <mscorlib.dll>
+#include <tchar.h>
 #include <windows.h>
 #include <mscoree.h>
+#include <comdef.h>
 
 #if defined(Yield)
 #undef Yield
@@ -25,13 +27,41 @@ enum FiberStateEnum {
 
 #pragma unmanaged
 
+void PrintIfError(TCHAR *area, HRESULT hr)
+{
+	if (SUCCEEDED(hr))
+		return;
+
+	int messageSize = 64 * 1024;
+	TCHAR *messageBuffer= (TCHAR*)malloc(sizeof(TCHAR) * messageSize);
+	if (messageBuffer == NULL)
+	{
+		_tprintf(_T("Failed to allocate for printError for %s"), area);
+		abort();
+	}
+
+	DWORD lastError = GetLastError();
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,
+				  NULL,
+				  lastError,
+				  0,
+				  messageBuffer,
+				  messageSize,
+				  0);
+
+	const TCHAR *hrStr = _com_error(hr).ErrorMessage();
+
+	_tprintf(_T("Failed %s\n\t%s\n\t%s"), area, hrStr, messageBuffer);
+
+	abort();
+}
+
 #if defined(CORHOST)
 ICorRuntimeHost *corhost;
 
 void initialize_corhost() {
-	HRESULT hr = CorBindToCurrentRuntime(0, CLSID_CorRuntimeHost, IID_ICorRuntimeHost, (void**) &corhost);
-	if (!SUCCEEDED(hr))
-		abort();
+	PrintIfError(_T("CorBindToCurrentRuntime"), CorBindToCurrentRuntime(0, CLSID_CorRuntimeHost, IID_ICorRuntimeHost, (void**) &corhost));
+	PrintIfError(_T("Start"), corhost->Start()); //Without SwitchOutLogicalThreadState fails on .net 4 (but not .net 3.5).
 }
 
 #endif
@@ -39,15 +69,11 @@ void initialize_corhost() {
 void CorSwitchToFiber(void *fiber) {
 #if defined(CORHOST)
 	DWORD *cookie;
-	HRESULT hr = corhost->SwitchOutLogicalThreadState(&cookie);
-	if (!SUCCEEDED(hr))
-		abort();
+	PrintIfError(_T("SwitchOutLogicalThreadState"), corhost->SwitchOutLogicalThreadState(&cookie));
 #endif
 	SwitchToFiber(fiber);
 #if defined(CORHOST)
-	hr = corhost->SwitchInLogicalThreadState(cookie);
-	if (!SUCCEEDED(hr))
-		abort();
+	PrintIfError(_T("SwitchInLogicalThreadState"), corhost->SwitchInLogicalThreadState(cookie));
 #endif
 }
 
