@@ -23,15 +23,15 @@ namespace Austin.LibTaskNet
 
         public static int Create(Action fun)
         {
-            return Create(_ => fun(), null);
-        }
-
-        public static int Create(Action<object> fun, object arg)
-        {
-            InternalTask t = new InternalTask(fun, arg);
+            InternalTask t = new InternalTask(fun);
             alltask.Add(t);
             Ready(t);
             return t.Id;
+        }
+
+        public static int Create<T>(Action<T> fun, T arg)
+        {
+            return Create(() => fun(arg));
         }
 
         internal static void Ready(InternalTask t)
@@ -80,7 +80,7 @@ namespace Austin.LibTaskNet
                 if (taskrunqueue.Count == 0)
                     throw new Exception(string.Format("No runnable tasks, %d tasks stalled.", alltask.Count));
 
-                InternalTask t = taskrunqueue.Dequeue();
+                var t = taskrunqueue.Dequeue();
 
                 t.IsReady = false;
                 taskrunning = t;
@@ -95,6 +95,12 @@ namespace Austin.LibTaskNet
                     alltask.Remove(t);
                 }
             }
+        }
+
+        public static void TaskMain(Action fun)
+        {
+            Create(fun);
+            TaskScheduler();
         }
 
         public static void TaskMain(Action<object> fun, object arg)

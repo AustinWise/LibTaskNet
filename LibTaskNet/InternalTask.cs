@@ -11,8 +11,7 @@ namespace Austin.LibTaskNet
     {
         private static int taskidgen = 0;
 
-        private Action<object> fun;
-        private object arg;
+        private Action fun;
 
         public bool IsReady { get; set; }
         public bool IsSystem { get; set; }
@@ -22,10 +21,9 @@ namespace Austin.LibTaskNet
 
         public bool WaitDone { get; set; }
 
-        public InternalTask(Action<object> fun, object arg)
+        public InternalTask(Action fun)
         {
             this.fun = fun;
-            this.arg = arg;
             this.Id = Interlocked.Increment(ref taskidgen);
 
             IsSystem = false;
@@ -36,7 +34,7 @@ namespace Austin.LibTaskNet
 
         protected override void Run()
         {
-            fun(arg);
+            fun();
             this.IsExiting = true;
         }
 

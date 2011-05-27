@@ -39,6 +39,9 @@ namespace Austin.LibTaskNet
 
         private static void FdTask()
         {
+            CoopScheduler.System();
+            CoopScheduler.State("fdtask");
+
             while (true)
             {
                 while (CoopScheduler.Yield() > 0)
@@ -69,6 +72,53 @@ namespace Austin.LibTaskNet
             CoopScheduler.State("fd wait");
             CoopScheduler.Switch();
             CoopScheduler.State("fd done");
+        }
+
+        private class DelayFdTask : FdTask
+        {
+            private DateTime dueTime;
+            private ManualResetEvent ev;
+            private bool disposed = false;
+
+            public DelayFdTask(int milliseconds)
+            {
+                this.dueTime = DateTime.Now.AddMilliseconds(milliseconds);
+                this.ev = new ManualResetEvent(false);
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    Thread.Sleep(milliseconds);
+                    lock (this)
+                    {
+                        if (!disposed)
+                            ev.Set();
+                    }
+                });
+            }
+
+            public override bool IsDone
+            {
+                get { return dueTime < DateTime.Now; }
+            }
+
+            public override WaitHandle Event
+            {
+                get { return ev; }
+            }
+
+            public override void Dispose()
+            {
+                lock (this)
+                {
+                    this.disposed = true;
+                    ev.Dispose();
+                }
+            }
+        }
+
+        public static void Delay(int milliseconds)
+        {
+            Wait(new DelayFdTask(milliseconds));
+            //CoopScheduler.Yield();
         }
     }
 }
