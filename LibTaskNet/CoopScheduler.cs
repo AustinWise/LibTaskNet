@@ -6,7 +6,7 @@ using System.Threading;
 
 namespace Austin.LibTaskNet
 {
-    public static class Task
+    public static class CoopScheduler
     {
         private static InternalTask taskrunning = null;
         private static List<InternalTask> alltask = new List<InternalTask>();

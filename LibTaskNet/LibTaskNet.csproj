@@ -43,7 +43,7 @@
     <Compile Include="FD.cs" />
     <Compile Include="InternalTask.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Task.cs" />
+    <Compile Include="CoopScheduler.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fibers\Fibers.vcxproj">

@@ -10,7 +10,7 @@ namespace Austin.LibTaskNet
     {
         public FdTask()
         {
-            this.MyTask = Task.Self;
+            this.MyTask = CoopScheduler.Self;
         }
 
         public InternalTask MyTask { get; private set; }
@@ -31,7 +31,7 @@ namespace Austin.LibTaskNet
             foreach (var t in done)
             {
                 sleeping.Remove(t);
-                Task.Ready(t.MyTask);
+                CoopScheduler.Ready(t.MyTask);
                 t.Dispose();
             }
             return done.Count != 0;
@@ -41,7 +41,7 @@ namespace Austin.LibTaskNet
         {
             while (true)
             {
-                while (Task.Yield() > 0)
+                while (CoopScheduler.Yield() > 0)
                     ;
 
                 if (wakeSleeping())
@@ -57,7 +57,7 @@ namespace Austin.LibTaskNet
         {
             if (!StartedFdTask)
             {
-                Task.Create(FdTask);
+                CoopScheduler.Create(FdTask);
                 StartedFdTask = true;
             }
         }
@@ -66,9 +66,9 @@ namespace Austin.LibTaskNet
         {
             StartFdTask();
             sleeping.Add(t);
-            Task.State("fd wait");
-            Task.Switch();
-            Task.State("fd done");
+            CoopScheduler.State("fd wait");
+            CoopScheduler.Switch();
+            CoopScheduler.State("fd done");
         }
     }
 }

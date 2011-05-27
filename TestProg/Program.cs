@@ -11,8 +11,8 @@ namespace TestProg
     {
         private static void startFun(object arg)
         {
-            Task.Create(_ => Console.WriteLine("lol1"), null);
-            Task.Create(_ => Console.WriteLine("lol2"), null);
+            CoopScheduler.Create(_ => Console.WriteLine("lol1"), null);
+            CoopScheduler.Create(_ => Console.WriteLine("lol2"), null);
 
             var fs = new FileStream(@"d:\Down\121465635.html", FileMode.Open, FileAccess.Read);
             byte[] bytes = new byte[100];
@@ -22,7 +22,7 @@ namespace TestProg
         }
         static void Main(string[] args)
         {
-            Task.TaskMain(startFun, null);
+            CoopScheduler.TaskMain(startFun, null);
             Console.WriteLine("back to main");
         }
     }
