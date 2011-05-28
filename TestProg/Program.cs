@@ -10,18 +10,6 @@ namespace TestProg
 {
     class Program
     {
-        private static void startFun(object arg)
-        {
-            CoopScheduler.Create(() => Console.WriteLine("lol1"));
-            CoopScheduler.Create(() => Console.WriteLine("lol2"));
-
-            var fs = new FileStream(@"d:\Down\121465635.html", FileMode.Open, FileAccess.Read);
-            byte[] bytes = new byte[100];
-
-            FD.Read(fs, bytes, 0, bytes.Length);
-            Console.WriteLine(Encoding.ASCII.GetString(bytes));
-        }
-
         private static void handleRequest(HttpListenerContext ctx)
         {
             var os = ctx.Response.OutputStream;
@@ -54,7 +42,6 @@ namespace TestProg
         static void Main(string[] args)
         {
             CoopScheduler.TaskMain(httpServer);
-            Console.WriteLine("back to main");
         }
     }
 }
