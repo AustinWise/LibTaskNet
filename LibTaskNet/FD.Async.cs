@@ -115,11 +115,17 @@ namespace Austin.LibTaskNet
             return t.Result;
         }
 
+        /// <summary>
+        /// An asynchronous version of the Stream.Read method.
+        /// </summary>
         public static int Read(Stream s, byte[] buffer, int offset, int count)
         {
             return WaitAsyncPattern(s.BeginRead, s.EndRead, buffer, offset, count);
         }
 
+        /// <summary>
+        /// An asynchronous version of the Stream.Write method.
+        /// </summary>
         public static void Write(Stream s, byte[] buffer, int offset, int count)
         {
             WaitAsyncPatternUnit(s.BeginWrite, s.EndWrite, buffer, offset, count);

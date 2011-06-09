@@ -115,10 +115,13 @@ namespace Austin.LibTaskNet
             }
         }
 
+        /// <summary>
+        /// Delays the current task.
+        /// </summary>
+        /// <param name="milliseconds">The delay time in milliseconds.</param>
         public static void Delay(int milliseconds)
         {
             Wait(new DelayFdTask(milliseconds));
-            //CoopScheduler.Yield();
         }
     }
 }
