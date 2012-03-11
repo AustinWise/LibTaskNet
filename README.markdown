@@ -1,81 +1,73 @@
 LibTaskNet, a libtask style coroutine library for .NET
 ------------------------------------------------------
 
-LibTaskNet is a coroutine library inspired by [libtask].  Has nice methods for
-using existing .NET asynchronous APIs with coroutines.
+LibTaskNet is a coroutine library inspired by [libtask].  Originally intented to
+have an API similar to that of libtask, LibTaskNet now uses the new C# await
+keyword to enable switching between functions.  Instead of providing IO
+functions, the new .NET 4.5 Async methods can be used.  This enables a
+co-routine that is supported by standard .NET APIs.  Viewed another way, you can
+write Node.JS style apps without the layers of nested callback function
+definitions.
+
+Check the [fibers] branch for a version of this library that uses fibers and is
+much more like [libtask].
 
 Example
 -------
 A super-simple HTTP server that processes each request in its own coroutine and
 every second prints "waiting".
 
-        private static void handleRequest(HttpListenerContext ctx)
+        private static async Task handleRequest(HttpListenerContext ctx)
         {
+            ctx.Response.ContentType = "text/plain";
             var os = ctx.Response.OutputStream;
-            var bytes = Encoding.ASCII.GetBytes("Turtles are the best.");
-            FD.Write(os, bytes, 0, bytes.Length);
+            var bytes = Encoding.ASCII.GetBytes("Hello World");
+            await os.WriteAsync(bytes, 0, bytes.Length);
             ctx.Response.Close();
         }
 
-        private static void httpServer()
+        private static async Task httpServer()
         {
-            CoopScheduler.Create(() =>
+            CoopScheduler.AddTask(async () =>
             {
                 while (true)
                 {
-                    FD.Delay(1000);
+                    await Task.Delay(1000);
                     Console.WriteLine("waiting");
                 }
             });
 
             HttpListener l = new HttpListener();
-            l.Prefixes.Add("http://+:1337/");
+            l.Prefixes.Add("http://+:8080/");
             l.Start();
             while (true)
             {
-                var ctx = FD.WaitAsyncPattern(l.BeginGetContext, l.EndGetContext);
-                CoopScheduler.Create(handleRequest, ctx);
+                var ctx = await l.GetContextAsync();
+                CoopScheduler.AddTask(() => handleRequest(ctx));
             }
         }
 
         static void Main(string[] args)
         {
-            CoopScheduler.TaskMain(httpServer);
+            CoopScheduler.AddTask(httpServer);
+            CoopScheduler.StartScheduler();
         }
 
 Dependencies
 ------------
 
- - .NET Framework 4.0 (Can also be compiled .NET 3.5)
+ - .NET Framework 4.5
+
+Credits
+-------
+This work is based in large part on the blog entry [Await, SynchronizationContext, and Console Apps]
+by Stephen Toub.
 
 License
 -------
 
-LibTaskNet is licensed under the three-clause BSD license.  However the
-Fibers.cpp from the [CoroutinesNET] MSDN article has it's own EULA.  The EULA
-looks reasonably permissive.
+LibTaskNet is licensed under the three-clause BSD license.
 
-
-Currently limitations
----------------------
-
-* Probably only works with x86.  It should not be too hard to make there
-  at least be a build option for x64 though.
-
-
-Areas for improvement
----------------------
-
- - Better reporting of exceptions from coroutines.  Currently they just get
-   eaten silently by the Fiber class.
- - Use the new (non-deprecated) .NET hosting API.
- - Perhaps integrate with the TaskScheduler API.  This probably would requiring
-   interfacing with the new .NET hosting API as users of the Task class assume
-   they can block and other tasks will continue to execute.  Implementing
-   [IHostSyncManager] would probably be the right place to address this problem.
- - Replace Fibers.cpp with something that has a more free license.
-
-
-  [CoroutinesNET]: http://msdn.microsoft.com/en-us/magazine/cc164086.aspx
-  [IHostSyncManager]: http://msdn.microsoft.com/en-us/library/ms164542.aspx
   [libtask]: http://swtch.com/libtask/
+  [Await, SynchronizationContext, and Console Apps]: http://blogs.msdn.com/b/pfxteam/archive/2012/01/20/10259049.aspx
+  [fibers]: https://github.com/AustinWise/LibTaskNet/tree/fibers

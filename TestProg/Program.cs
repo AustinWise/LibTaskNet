@@ -5,43 +5,46 @@ using System.Text;
 using Austin.LibTaskNet;
 using System.IO;
 using System.Net;
+using System.Threading.Tasks;
 
 namespace TestProg
 {
     class Program
     {
-        private static void handleRequest(HttpListenerContext ctx)
+        private static async Task handleRequest(HttpListenerContext ctx)
         {
+            ctx.Response.ContentType = "text/plain";
             var os = ctx.Response.OutputStream;
-            var bytes = Encoding.ASCII.GetBytes("Turtles are the best.");
-            FD.Write(os, bytes, 0, bytes.Length);
+            var bytes = Encoding.ASCII.GetBytes("Hello World");
+            await os.WriteAsync(bytes, 0, bytes.Length);
             ctx.Response.Close();
         }
 
-        private static void httpServer()
+        private static async Task httpServer()
         {
-            CoopScheduler.Create(() =>
+            CoopScheduler.AddTask(async () =>
             {
                 while (true)
                 {
-                    FD.Delay(1000);
+                    await Task.Delay(1000);
                     Console.WriteLine("waiting");
                 }
             });
 
             HttpListener l = new HttpListener();
-            l.Prefixes.Add("http://+:1337/");
+            l.Prefixes.Add("http://+:8080/");
             l.Start();
             while (true)
             {
-                var ctx = FD.WaitAsyncPattern(l.BeginGetContext, l.EndGetContext);
-                CoopScheduler.Create(handleRequest, ctx);
+                var ctx = await l.GetContextAsync();
+                CoopScheduler.AddTask(() => handleRequest(ctx));
             }
         }
 
         static void Main(string[] args)
         {
-            CoopScheduler.TaskMain(httpServer);
+            CoopScheduler.AddTask(httpServer);
+            CoopScheduler.StartScheduler();
         }
     }
 }
