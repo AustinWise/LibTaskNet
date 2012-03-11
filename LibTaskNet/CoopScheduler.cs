@@ -1,155 +1,95 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Austin.LibTaskNet
 {
     public static class CoopScheduler
     {
-        private static InternalTask taskrunning = null;
-        private static List<InternalTask> alltask = new List<InternalTask>();
-        private static int tasknswitch = 0;
-        private static Queue<InternalTask> taskrunqueue = new Queue<InternalTask>();
+        private static BlockingCollection<Tuple<SendOrPostCallback, object>> sCallbacks = new BlockingCollection<Tuple<SendOrPostCallback, object>>();
+        private static int sOutstandingTasks = 0;
 
-        internal static InternalTask Self
+        private static void CompleteTask(Task t)
         {
-            get
-            {
-                return taskrunning;
-            }
+            //observe the result on the main thread, which will propegate execeptions
+            sCallbacks.Add(new Tuple<SendOrPostCallback, object>(_ => t.GetAwaiter().GetResult(), null));
+            CompleteTask();
+        }
+
+        private static void StartTask()
+        {
+            Interlocked.Increment(ref sOutstandingTasks);
+        }
+
+        private static void CompleteTask()
+        {
+            if (Interlocked.Decrement(ref sOutstandingTasks) == 0)
+                sCallbacks.CompleteAdding();
         }
 
         /// <summary>
         /// Creates a new task and schedules it to run.
         /// </summary>
         /// <param name="fun">The function to schedule.</param>
-        /// <returns>The id of the task.</returns>
-        public static int Create(Action fun)
+        public static void AddTask(Func<Task> task)
         {
-            InternalTask t = new InternalTask(fun);
-            alltask.Add(t);
-            Ready(t);
-            return t.Id;
+            StartTask();
+            sCallbacks.Add(new Tuple<SendOrPostCallback, object>(_ => task().ContinueWith(CompleteTask), null));
         }
 
         /// <summary>
-        /// Creates a new task and schedules it to run.
+        /// Starts executing tasks and does not return until all tasks have
+        /// completed execution.
         /// </summary>
-        /// <param name="fun">The function to schedule.</param>
-        /// <param name="arg">The argument to pass to pass to the function.</param>
-        /// <returns>The id of the task.</returns>
-        public static int Create<T>(Action<T> fun, T arg)
+        /// <remarks>
+        /// If a scheduled task throws an exception, it will be raised here.
+        /// If no tasks are scheduled, an exception will be thrown.
+        /// </remarks>
+        public static void StartScheduler()
         {
-            return Create(() => fun(arg));
-        }
-
-        /// <summary>
-        /// Adds the task to the run queue.
-        /// </summary>
-        /// <param name="t">The task.</param>
-        internal static void Ready(InternalTask t)
-        {
-            t.IsReady = true;
-            taskrunqueue.Enqueue(t);
-        }
-
-        /// <summary>
-        /// Yields control to other tasks and reschedules this task.
-        /// </summary>
-        /// <returns>The number of tasks that ran before returning to this one.</returns>
-        public static int Yield()
-        {
-            int n = tasknswitch;
-            Ready(taskrunning);
-            Switch();
-
-            return tasknswitch - n - 1;
-        }
-
-        /// <summary>
-        /// Exits the current thread.
-        /// </summary>
-        public static void Exit()
-        {
-            taskrunning.IsExiting = true;
-            Switch();
-        }
-
-        /// <summary>
-        /// Marks the current task as a system task.  This means that this task will not be counted to see if the schduler
-        /// should exit when there are no more tasks.
-        /// </summary>
-        public static void System()
-        {
-            taskrunning.IsSystem = true;
-        }
-
-
-        /// <summary>
-        /// Switches to a different thread without rescheduling this one.
-        /// </summary>
-        public static void Switch()
-        {
-            taskrunning.Yield();
-        }
-
-        /// <summary>
-        /// Sets the current state of this thread.
-        /// </summary>
-        /// <param name="state">The state of this thread.</param>
-        public static void State(string state)
-        {
-            taskrunning.State = state;
-        }
-
-        private static void TaskScheduler()
-        {
-            while (true)
+            if (sOutstandingTasks == 0)
+                throw new InvalidOperationException("At least one task should be added with AddTask() before calling StartSched().");
+            using (new CoopSyncContext())
             {
-                if (!alltask.Where(tt => !tt.IsSystem).Any())
-                    return;
-
-                if (taskrunqueue.Count == 0)
-                    throw new Exception(string.Format("No runnable tasks, %d tasks stalled.", alltask.Count));
-
-                var t = taskrunqueue.Dequeue();
-
-                t.IsReady = false;
-                taskrunning = t;
-                Interlocked.Increment(ref tasknswitch);
-
-                t.Resume();
-                taskrunning = null;
-
-                if (t.IsExiting || t.GetException() != null)
-                {
-                    t.Dispose();
-                    alltask.Remove(t);
-                }
+                Tuple<SendOrPostCallback, object> tup;
+                while (sCallbacks.TryTake(out tup, Timeout.Infinite))
+                    tup.Item1(tup.Item2);
             }
         }
 
-        /// <summary>
-        /// Starts the scheduler.
-        /// </summary>
-        /// <param name="fun">The first task to run.</param>
-        public static void TaskMain(Action fun)
+        class CoopSyncContext : SynchronizationContext, IDisposable
         {
-            Create(fun);
-            TaskScheduler();
-        }
+            private SynchronizationContext mOldContext;
 
-        /// <summary>
-        /// Starts the scheduler.
-        /// </summary>
-        /// <param name="fun">The first task to run.</param>
-        /// <param name="arg">The paramter to the task.</param>
-        public static void TaskMain(Action<object> fun, object arg)
-        {
-            Create(fun, arg);
-            TaskScheduler();
+            public CoopSyncContext()
+            {
+                this.mOldContext = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(this);
+            }
+
+            public void Dispose()
+            {
+                SynchronizationContext.SetSynchronizationContext(mOldContext);
+            }
+
+            public override void Post(SendOrPostCallback d, object state)
+            {
+                sCallbacks.Add(new Tuple<SendOrPostCallback, object>(d, state));
+            }
+
+            public override void OperationStarted()
+            {
+                StartTask();
+            }
+
+            public override void OperationCompleted()
+            {
+                CompleteTask();
+            }
         }
     }
 }
